@@ -153,17 +153,14 @@ for _d in ("./Youtube/", "./scrapped/"):
     if path.isdir(_d):
         shutil.rmtree(_d)
     mkdir(_d)
+  scrap_dir = "./scrapped/"
+if path.isdir(scrap_dir):
+    shutil.rmtree(scrap_dir)
+mkdir(scrap_dir)
 
 scheduler = AsyncIOScheduler(timezone=TIME_ZONE)
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# AUTO AIOGRAM ROUTER LOADER
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Yr eda kam karda:
-# Plugin file vich bas "router" variable rakh deo
-# Ye function auto scan karda Powers/plugins/ folder
-# Koi manually include_router nahi karna bot_class.py vich
 
 def load_aiogram_routers():
     from glob import glob
