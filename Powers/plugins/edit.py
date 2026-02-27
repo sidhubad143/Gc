@@ -1,28 +1,29 @@
-import re
-import time
-import asyncio
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+"""
+edit.py — Anti Edit Plugin (Aiogram)
+"""
 
-from aiogram import Bot, Dispatcher, Router, F
-from aiogram.types import (
-    Message, ChatMemberUpdated, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
-    ChatPermissions
-)
-from aiogram.filters import Command, ChatMemberUpdatedFilter
-from aiogram.enums import ChatMemberStatus, ParseMode
-from pymongo import MongoClient
+import asyncio
+
+from aiogram import Bot, Router, F
+from aiogram.types import Message
+from aiogram.enums import ParseMode
+
+from Powers import LOGGER
+from Powers.utils.parser import mention_html
+from Powers.utils.admin_check_aiogram import is_admin_silent
 
 router = Router()
 
+
+def _name(user) -> str:
+    return mention_html(user.first_name or "User", user.id)
+
+
 @router.edited_message(F.text & F.chat.type.in_({"group", "supergroup"}))
 async def anti_edit(message: Message, bot: Bot):
-    if not _feat(message.chat.id, "anti_edit"):
+    if not message.from_user:
         return
-    if not message.from_user or is_exempt(message.from_user.id):
-        return
-    if await is_admin_aiogram(bot, message.chat.id, message.from_user.id):
+    if await is_admin_silent(bot, message.chat.id, message.from_user.id):
         return
     try:
         await message.delete()
@@ -33,6 +34,5 @@ async def anti_edit(message: Message, bot: Bot):
         )
         await asyncio.sleep(10)
         await m.delete()
-    except Exception:
-        pass
-        
+    except Exception as ef:
+        LOGGER.error(f"[anti_edit] {ef}")
