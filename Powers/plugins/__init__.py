@@ -1,7 +1,11 @@
-async def all_plugins():
-    # This generates a list of plugins in this folder for the * in __main__ to
-    # work.
+from sys import exit as exiter
 
+
+async def all_plugins():
+    """
+    Auto-detects all .py files in this folder (except __init__.py)
+    and returns them as a sorted list for the plugin loader.
+    """
     from glob import glob
     from os.path import basename, dirname, isfile
 
@@ -14,27 +18,32 @@ async def all_plugins():
     return sorted(all_plugs)
 
 
-from sys import exit as exiter
-
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# BIRTHDAY DB (optional — only if BDB_URI is set)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 from Powers import BDB_URI, LOGGER
 
 if BDB_URI:
-    try:
-        BIRTHDAY_DB = MongoClient(BDB_URI)
-    except PyMongoError as f:
-        LOGGER.error(f"Error in Mongodb2: {f}")
-        exiter(1)
-    Birth_main_db = BIRTHDAY_DB["birthdays"]
+    from pymongo import MongoClient
+    from pymongo.errors import PyMongoError
 
-    bday_info = Birth_main_db['users_bday']
-    bday_cinfo = Birth_main_db["chat_bday"]
+    try:
+        BIRTHDAY_DB  = MongoClient(BDB_URI)
+        Birth_main_db = BIRTHDAY_DB["birthdays"]
+        bday_info    = Birth_main_db["users_bday"]
+        bday_cinfo   = Birth_main_db["chat_bday"]
+        LOGGER.info("✅ Birthday DB connected.")
+    except PyMongoError as f:
+        LOGGER.error(f"❌ Birthday DB error: {f}")
+        exiter(1)
+
+
+# ── Utility ───────────────────────────────────────────────────────────────────
 
 from datetime import datetime
 
 
-def till_date(date):
-    form = "%Y-%m-%d %H:%M:%S"
-    return datetime.strptime(date, form)
+def till_date(date: str) -> datetime:
+    """Convert date string to datetime object."""
+    return datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
