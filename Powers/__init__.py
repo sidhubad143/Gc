@@ -146,14 +146,15 @@ tele_client = TelegramClient("telethon_bot", api_id=API_ID, api_hash=API_HASH)
 LOGGER.info("✅ Telethon ready.")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# TEMP DIRS
+# TEMP DIRS  (exported so other modules can import)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-for _d in ("./Youtube/", "./scrapped/"):
-    if path.isdir(_d):
-        shutil.rmtree(_d)
-    mkdir(_d)
-  scrap_dir = "./scrapped/"
+youtube_dir = "./Youtube/"
+if path.isdir(youtube_dir):
+    shutil.rmtree(youtube_dir)
+mkdir(youtube_dir)
+
+scrap_dir = "./scrapped/"
 if path.isdir(scrap_dir):
     shutil.rmtree(scrap_dir)
 mkdir(scrap_dir)
@@ -161,9 +162,13 @@ mkdir(scrap_dir)
 scheduler = AsyncIOScheduler(timezone=TIME_ZONE)
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AUTO AIOGRAM ROUTER LOADER
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def load_aiogram_routers():
     from glob import glob
+    from os.path import basename
     import Powers.plugins as _pkg
 
     plugin_dir = path.dirname(_pkg.__file__)
@@ -173,7 +178,6 @@ def load_aiogram_routers():
     skipped = []
 
     for f in sorted(mod_paths):
-        from os.path import basename
         name = basename(f)[:-3]
 
         if name == "__init__":
@@ -184,7 +188,6 @@ def load_aiogram_routers():
 
         try:
             mod = imp_mod(f"Powers.plugins.{name}")
-            # ── Agar plugin vich "router" hai toh auto register ───────────────
             if hasattr(mod, "router"):
                 aiogram_dp.include_router(mod.router)
                 loaded.append(name)
@@ -239,4 +242,4 @@ async def load_cmds(all_plugins):
 
     return (
         ", ".join((i.split(".")[1]).capitalize() for i in list(HELP_COMMANDS.keys())) + "\n"
-                  )
+  )
