@@ -1,3 +1,11 @@
+"""
+handlers/nsfw.py — Full NSFW + Weapon + Drug Detection Plugin
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Project: nswf-main (alag bot — Gc repo se alag hai)
+DB:      database/nsfw_db.py
+Model:   handlers/nsfw_model/nsfw_mobilenet2.224x224.h5
+"""
+
 import asyncio
 import gzip
 import json
@@ -5,7 +13,7 @@ import base64
 import os
 import tempfile
 from traceback import format_exc
-from typing import Optional, Dict
+from typing import Optional
 
 import cv2
 import imageio
@@ -21,23 +29,21 @@ from Powers.bot_class import Gojo
 from Powers.database.nsfw_db import NSFWSettings, NSFWApprove, NSFWViolations
 from Powers.supports import get_support_staff
 from Powers.utils.caching import ADMIN_CACHE, admin_cache_reload
-from Powers.utils.custom_filters import command, owner_filter
+from Powers.utils.custom_filters import command
 from Powers.utils.extract_user import extract_user
 from Powers.utils.parser import mention_html
-from Powers.utils.predict import detect_nsfw
+from Powers.utils.predict import detect_nsfw, get_media_path, clean_media_folder
 
-# ── Temp dir ──────────────────────────────────────────────────────────────────
-MEDIA_DIR = "./nsfw_temp/"
-os.makedirs(MEDIA_DIR, exist_ok=True)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CONFIG
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# ── NSFW Thresholds ───────────────────────────────────────────────────────────
 NSFW_THRESHOLDS = {
     "porn":   0.60,
     "hentai": 0.65,
     "sexy":   0.75,
 }
 
-# ── Dangerous file extensions ─────────────────────────────────────────────────
 BLOCKED_EXTENSIONS = {
     ".exe", ".bat", ".sh", ".apk", ".ipa",
     ".cmd", ".vbs", ".msi", ".dll", ".scr"
@@ -57,7 +63,7 @@ class MediaConverter:
                 img.convert("RGB").save(out, "PNG")
             return out
         except Exception as e:
-            LOGGER.error(f"[nsfw] webp→png failed: {e}")
+            LOGGER.error(f"[nsfw] webp→png: {e}")
             return None
 
     @staticmethod
@@ -75,7 +81,7 @@ class MediaConverter:
                 imageio.imwrite(out, np.array(frame, dtype=np.uint8), format="JPEG")
             return out
         except Exception as e:
-            LOGGER.error(f"[nsfw] webm frame failed: {e}")
+            LOGGER.error(f"[nsfw] webm frame: {e}")
             return None
 
     @staticmethod
@@ -98,7 +104,7 @@ class MediaConverter:
             Image.new("RGB", (w, h), (255, 255, 255)).save(out)
             return out
         except Exception as e:
-            LOGGER.error(f"[nsfw] tgs→png failed: {e}")
+            LOGGER.error(f"[nsfw] tgs→png: {e}")
             return None
 
 
@@ -113,7 +119,7 @@ def _video_first_frame(path: str) -> Optional[str]:
             return out
         return None
     except Exception as e:
-        LOGGER.error(f"[nsfw] video frame failed: {e}")
+        LOGGER.error(f"[nsfw] video frame: {e}")
         return None
 
 
@@ -150,44 +156,43 @@ async def _should_delete(
     nsfw_db: NSFWApprove,
 ) -> bool:
     """
-    Returns True if message should be deleted based on mode.
-
-    soft   — Admins' sticker safe, baki sab delete
-    normal — Group owner + admins + approved safe, baki delete
-    strict — Bot owner + approved sirf safe, baaki sab delete
+    soft   — Admins' stickers safe, baki sab scan
+    normal — Owner + admins + approved safe
+    strict — Sirf bot owner + approved safe
     """
     if mode == "off":
         return False
-
-    # Bot owner always safe
     if _is_bot_owner(user_id):
         return False
-
-    # Approved user always safe
     if nsfw_db.is_approved(chat_id, user_id):
         return False
 
     admins = await _get_admins(c, chat_id)
 
     if mode == "soft":
-        # Admins ke stickers safe — normal media nahi
         if is_sticker and user_id in admins:
             return False
         return True
-
     elif mode == "normal":
-        # Group owner + admins safe
         if user_id in admins:
             return False
         if await _is_group_owner(c, chat_id, user_id):
             return False
         return True
-
     elif mode == "strict":
-        # Sirf bot owner + approved (already handled above)
         return True
 
     return False
+
+
+async def _warn(c: Gojo, chat_id: int, text: str, delay: int = 15):
+    """Send warning and auto-delete after delay seconds."""
+    try:
+        msg = await c.send_message(chat_id, text)
+        await asyncio.sleep(delay)
+        await msg.delete()
+    except Exception:
+        pass
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -213,60 +218,59 @@ async def nsfw_media_handler(c: Gojo, m: Message):
     if mode == "off":
         return
 
-    # ── Block dangerous files ─────────────────────────────────────────────────
+    # ── Block dangerous file extensions ───────────────────────────────────────
     if m.document and m.document.file_name:
         ext = os.path.splitext(m.document.file_name)[1].lower()
         if ext in BLOCKED_EXTENSIONS:
-            should_del = await _should_delete(c, chat_id, user_id, mode, False, nsfw_app)
-            if should_del:
+            if await _should_delete(c, chat_id, user_id, mode, False, nsfw_app):
                 try:
                     await m.delete()
                     mention = await mention_html(m.from_user.first_name, user_id)
-                    warn = await c.send_message(
-                        chat_id,
-                        f"🚫 {mention} — <b>Dangerous file blocked!</b>",
-                    )
-                    await asyncio.sleep(8)
-                    await warn.delete()
+                    asyncio.create_task(_warn(
+                        c, chat_id,
+                        f"🚫 {mention} — <b>Dangerous file blocked!</b> (<code>{ext}</code>)",
+                        delay=8
+                    ))
                 except Exception:
                     pass
             return
 
-    # ── Determine if sticker ──────────────────────────────────────────────────
     is_sticker = bool(m.sticker)
 
-    # ── Check if should be scanned ────────────────────────────────────────────
-    should_del = await _should_delete(c, chat_id, user_id, mode, is_sticker, nsfw_app)
-    if not should_del:
+    if not await _should_delete(c, chat_id, user_id, mode, is_sticker, nsfw_app):
         return
 
     original_path  = None
     processed_path = None
 
     try:
-        # ── Get file ──────────────────────────────────────────────────────────
+        # ── Determine file + extension ────────────────────────────────────────
         if m.photo:
-            file = m.photo; ext = ".jpg"
+            file = m.photo
+            ext  = ".jpg"
         elif m.video or m.video_note:
-            file = m.video or m.video_note; ext = ".mp4"
+            file = m.video or m.video_note
+            ext  = ".mp4"
         elif m.sticker:
             file = m.sticker
-            ext = ".tgs" if file.is_animated else (".webm" if file.is_video else ".webp")
+            ext  = ".tgs" if file.is_animated else (".webm" if file.is_video else ".webp")
         elif m.animation:
-            file = m.animation; ext = ".mp4"
+            file = m.animation
+            ext  = ".mp4"
         elif m.document:
             file = m.document
             ext  = os.path.splitext(file.file_name or "")[1] or ".bin"
         else:
             return
 
-        original_path = os.path.join(MEDIA_DIR, f"{user_id}_{file.file_id}{ext}")
+        # ── Download using get_media_path (scrapped/ folder) ─────────────────
+        original_path = get_media_path(user_id, f"{file.file_id}{ext}")
         await c.download_media(file.file_id, file_name=original_path)
 
         if not os.path.exists(original_path):
             return
 
-        # ── Convert to image ──────────────────────────────────────────────────
+        # ── Convert to scannable image ────────────────────────────────────────
         if m.sticker:
             if file.is_animated:
                 processed_path = MediaConverter.tgs_to_png(original_path)
@@ -282,67 +286,110 @@ async def nsfw_media_handler(c: Gojo, m: Message):
         if not processed_path or not os.path.exists(processed_path):
             return
 
-        # ── NSFW Detection ────────────────────────────────────────────────────
-        result = detect_nsfw(processed_path)
+        # ── Full Detection: NSFW + Weapon + Drug ──────────────────────────────
+        result = detect_nsfw(processed_path)  # auto-deletes processed_path
+        processed_path = None  # already deleted by detect_nsfw
+
         if not result:
             return
 
+        mention  = await mention_html(m.from_user.first_name, user_id)
+        content  = "STICKER 🎭" if is_sticker else "MEDIA 🖼"
+        deleted  = False
+
+        # ── 1. NSFW ───────────────────────────────────────────────────────────
         triggered = None
+        nsfw_scores = result.get("nsfw", {})
         for cat, threshold in NSFW_THRESHOLDS.items():
-            if result.get(cat, 0) >= threshold:
+            if nsfw_scores.get(cat, 0) >= threshold:
                 triggered = cat
                 break
 
-        if not triggered:
-            return
+        if triggered:
+            try:
+                await m.delete()
+                deleted = True
+            except Exception:
+                pass
+            NSFWViolations().add_violation(chat_id, user_id, triggered)
+            score = nsfw_scores.get(triggered, 0)
+            asyncio.create_task(_warn(
+                c, chat_id,
+                f"╭───────────────────\n"
+                f"│ 🔞 <b>NSFW {content} DETECTED</b>\n"
+                f"╰───────────────────\n"
+                f"👤 <b>User:</b> {mention}\n"
+                f"📊 <b>Category:</b> <code>{triggered}</code> ({score:.0%})\n"
+                f"⚠️ <b>Action:</b> Message deleted."
+            ))
 
-        # ── Delete + warn ─────────────────────────────────────────────────────
-        try:
-            await m.delete()
-        except Exception:
-            pass
+        # ── 2. Weapon ─────────────────────────────────────────────────────────
+        if result.get("has_weapon"):
+            if not deleted:
+                try:
+                    await m.delete()
+                    deleted = True
+                except Exception:
+                    pass
+            NSFWViolations().add_violation(chat_id, user_id, "weapon")
+            det_str = ", ".join(
+                f"{d['label']} ({d['confidence']:.0%})"
+                for d in result.get("detections", [])
+                if d.get("type") == "weapon"
+            )
+            asyncio.create_task(_warn(
+                c, chat_id,
+                f"╭───────────────────\n"
+                f"│ 🔫 <b>WEAPON DETECTED</b>\n"
+                f"╰───────────────────\n"
+                f"👤 <b>User:</b> {mention}\n"
+                f"🔍 <b>Detected:</b> <code>{det_str or 'weapon'}</code>\n"
+                f"⚠️ <b>Action:</b> Message deleted."
+            ))
 
-        NSFWViolations().add_violation(chat_id, user_id, triggered)
-        mention = await mention_html(m.from_user.first_name, user_id)
-        content = "sticker 🎭" if is_sticker else "media 🖼"
-
-        warn = await c.send_message(
-            chat_id,
-            f"╭───────────────────\n"
-            f"│ 🔞 <b>NSFW {content.upper()} DETECTED</b>\n"
-            f"╰───────────────────\n"
-            f"👤 <b>User:</b> {mention}\n"
-            f"📊 <b>Category:</b> <code>{triggered}</code> "
-            f"({result.get(triggered, 0):.0%})\n"
-            f"⚠️ <b>Action:</b> Message deleted.",
-        )
-        await asyncio.sleep(15)
-        try:
-            await warn.delete()
-        except Exception:
-            pass
+        # ── 3. Drugs ──────────────────────────────────────────────────────────
+        if result.get("has_drugs"):
+            if not deleted:
+                try:
+                    await m.delete()
+                    deleted = True
+                except Exception:
+                    pass
+            NSFWViolations().add_violation(chat_id, user_id, "drugs")
+            det_str = ", ".join(
+                f"{d['label']} ({d['confidence']:.0%})"
+                for d in result.get("detections", [])
+                if d.get("type") == "drug"
+            )
+            asyncio.create_task(_warn(
+                c, chat_id,
+                f"╭───────────────────\n"
+                f"│ 💊 <b>DRUGS DETECTED</b>\n"
+                f"╰───────────────────\n"
+                f"👤 <b>User:</b> {mention}\n"
+                f"🔍 <b>Detected:</b> <code>{det_str or 'drug-related'}</code>\n"
+                f"⚠️ <b>Action:</b> Message deleted."
+            ))
 
     except Exception as ef:
         LOGGER.error(f"[nsfw_handler] {ef}")
         LOGGER.error(format_exc())
     finally:
-        for path in {original_path, processed_path}:
-            try:
-                if path and os.path.exists(path):
-                    os.remove(path)
-            except Exception:
-                pass
+        # Cleanup original (processed already deleted by detect_nsfw)
+        try:
+            if original_path and os.path.exists(original_path):
+                os.remove(original_path)
+        except Exception:
+            pass
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# /nsfwmode — Group owner / bot owner set kar sakda
+# /nsfwmode
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @Gojo.on_message(command("nsfwmode") & filters.group)
 async def set_nsfw_mode(c: Gojo, m: Message):
     user_id = m.from_user.id
-
-    # Only group owner or bot owner
     if not _is_bot_owner(user_id) and not await _is_group_owner(c, m.chat.id, user_id):
         return await m.reply_text("🚫 Only <b>group owner</b> or bot owner can set NSFW mode.")
 
@@ -362,47 +409,41 @@ async def set_nsfw_mode(c: Gojo, m: Message):
 
     new_mode = args[1].lower()
     if new_mode not in ("off", "soft", "normal", "strict"):
-        return await m.reply_text("❌ Invalid mode! Use: <code>off | soft | normal | strict</code>")
+        return await m.reply_text("❌ Use: <code>off | soft | normal | strict</code>")
 
     NSFWSettings().set_mode(m.chat.id, new_mode)
-
     mode_desc = {
         "off":    "NSFW detection <b>disabled</b>.",
-        "soft":   "Admins' stickers safe, other users' NSFW deleted.",
-        "normal": "Group owner + admins + approved users safe.",
-        "strict": "Only bot owner + approved users safe.",
+        "soft":   "Admins' stickers safe, others' NSFW deleted.",
+        "normal": "Owner + admins + approved safe.",
+        "strict": "Only bot owner + approved safe.",
     }
     await m.reply_text(
-        f"✅ NSFW mode set to <code>{new_mode}</code>\n"
-        f"<i>{mode_desc[new_mode]}</i>"
+        f"✅ NSFW mode → <code>{new_mode}</code>\n<i>{mode_desc[new_mode]}</i>"
     )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# /nsfwapprove — Group owner / bot owner approve kar sakda
+# /nsfwapprove
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @Gojo.on_message(command("nsfwapprove") & filters.group)
 async def nsfw_approve(c: Gojo, m: Message):
     user_id = m.from_user.id
-
     if not _is_bot_owner(user_id) and not await _is_group_owner(c, m.chat.id, user_id):
-        return await m.reply_text("🚫 Only <b>group owner</b> or bot owner can approve users.")
-
+        return await m.reply_text("🚫 Only group owner or bot owner can approve users.")
     try:
         target_id, target_name, _ = await extract_user(c, m)
     except Exception:
-        return await m.reply_text("❌ User not found. Reply to user or give username.")
-
+        return await m.reply_text("❌ User not found.")
     if not target_id:
         return await m.reply_text("❌ User not found.")
-
     db = NSFWApprove()
     if db.approve(m.chat.id, target_id, user_id):
         mention = await mention_html(target_name, target_id)
-        await m.reply_text(f"✅ {mention} approved — NSFW filter will skip this user.")
+        await m.reply_text(f"✅ {mention} approved — NSFW filter skips this user.")
     else:
-        await m.reply_text("⚠️ User is already approved.")
+        await m.reply_text("⚠️ Already approved.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -412,50 +453,44 @@ async def nsfw_approve(c: Gojo, m: Message):
 @Gojo.on_message(command("nsfwunapprove") & filters.group)
 async def nsfw_unapprove(c: Gojo, m: Message):
     user_id = m.from_user.id
-
     if not _is_bot_owner(user_id) and not await _is_group_owner(c, m.chat.id, user_id):
-        return await m.reply_text("🚫 Only <b>group owner</b> or bot owner can unapprove users.")
-
+        return await m.reply_text("🚫 Only group owner or bot owner can unapprove.")
     try:
         target_id, target_name, _ = await extract_user(c, m)
     except Exception:
         return await m.reply_text("❌ User not found.")
-
     db = NSFWApprove()
     if db.unapprove(m.chat.id, target_id):
         mention = await mention_html(target_name, target_id)
-        await m.reply_text(f"✅ {mention} removed from NSFW approved list.")
+        await m.reply_text(f"✅ {mention} removed from approved list.")
     else:
-        await m.reply_text("⚠️ User was not in approved list.")
+        await m.reply_text("⚠️ User was not approved.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# /nsfwapproved — list all approved users
+# /nsfwapproved
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @Gojo.on_message(command("nsfwapproved") & filters.group)
 async def nsfw_approved_list(c: Gojo, m: Message):
     approved = NSFWApprove().list_approved(m.chat.id)
     if not approved:
-        return await m.reply_text("No users approved for NSFW bypass in this chat.")
-
+        return await m.reply_text("No approved users in this chat.")
     lines = []
     for u in approved:
         try:
-            user = await c.get_users(u["user_id"])
+            user    = await c.get_users(u["user_id"])
             mention = await mention_html(user.first_name, user.id)
         except Exception:
             mention = f"<code>{u['user_id']}</code>"
         lines.append(f"• {mention}")
-
     await m.reply_text(
-        f"✅ <b>NSFW Approved Users</b> ({len(lines)})\n\n"
-        + "\n".join(lines)
+        f"✅ <b>NSFW Approved</b> ({len(lines)})\n\n" + "\n".join(lines)
     )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# /nsfwstats — violation history
+# /nsfwstats
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @Gojo.on_message(command("nsfwstats") & filters.group)
@@ -476,20 +511,26 @@ async def nsfw_stats(c: Gojo, m: Message):
     mention    = await mention_html(target_name, target_id)
 
     if not violations:
-        return await m.reply_text(f"✅ {mention} has no NSFW violations in this chat.")
+        return await m.reply_text(f"✅ {mention} has no violations in this chat.")
 
-    lines = []
-    for v in violations:
-        last = str(v.get("last_seen", "")).split(".")[0]
-        lines.append(
-            f"🔸 <code>{v['category']}</code> — "
-            f"{v['count']}x (last: {last})"
-        )
+    lines = [
+        f"🔸 <code>{v['category']}</code> — {v['count']}x "
+        f"(last: {str(v.get('last_seen','')).split('.')[0]})"
+        for v in violations
+    ]
+    await m.reply_text(f"📊 <b>Violations:</b> {mention}\n\n" + "\n".join(lines))
 
-    await m.reply_text(
-        f"📊 <b>NSFW Violations:</b> {mention}\n\n"
-        + "\n".join(lines)
-    )
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# /nsfwclean — bot owner manually saaf kare
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@Gojo.on_message(command("nsfwclean") & filters.group)
+async def nsfw_clean_cmd(c: Gojo, m: Message):
+    if not _is_bot_owner(m.from_user.id):
+        return
+    ok = clean_media_folder()
+    await m.reply_text("✅ Media folder cleaned!" if ok else "❌ Failed.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -502,19 +543,19 @@ __alt_name__ = ["nsfwmode", "nsfwapprove"]
 __HELP__ = """
 <b>🔞 NSFW Filter</b>
 
-Automatically detects and deletes NSFW content in the group.
+Auto-detects and deletes NSFW content, weapons 🔫, and drugs 💊.
 
-<b>Modes (set by group owner / bot owner only):</b>
+<b>Modes (group owner / bot owner only):</b>
 • <code>off</code> — Disabled
-• <code>soft</code> — Admins' stickers are safe, everyone else's NSFW deleted
-• <code>normal</code> — Group owner + admins + approved safe
-• <code>strict</code> — Only bot owner + approved users safe, everyone else deleted
+• <code>soft</code> — Admins' stickers safe, others deleted
+• <code>normal</code> — Owner + admins + approved safe
+• <code>strict</code> — Only bot owner + approved safe
 
 <b>Commands:</b>
-• /nsfwmode <code>[off|soft|normal|strict]</code> — Set NSFW mode <i>(owner only)</i>
-• /nsfwapprove — Approve user (reply/username) <i>(owner only)</i>
-• /nsfwunapprove — Remove approval <i>(owner only)</i>
+• /nsfwmode <code>[off|soft|normal|strict]</code> — Set mode
+• /nsfwapprove — Approve user (reply/@user)
+• /nsfwunapprove — Remove approval
 • /nsfwapproved — List approved users
-• /nsfwstats — View your violation history
-• /nsfwstats <code>[reply/@user]</code> — View someone's violation history
+• /nsfwstats — View violation history
+• /nsfwstats <code>[reply/@user]</code> — Someone's history
 """
