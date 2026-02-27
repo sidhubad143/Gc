@@ -159,6 +159,14 @@ if path.isdir(scrap_dir):
     shutil.rmtree(scrap_dir)
 mkdir(scrap_dir)
 
+# predict.py downloads images to scrapped/ — cleanup on restart
+try:
+    from Powers.utils.predict import clean_media_folder
+    clean_media_folder()
+    LOGGER.info("✅ Media folder cleaned on startup.")
+except Exception:
+    pass  # tensorflow not installed — skip silently
+
 scheduler = AsyncIOScheduler(timezone=TIME_ZONE)
 
 
