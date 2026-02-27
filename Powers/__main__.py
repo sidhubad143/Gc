@@ -1,3 +1,4 @@
+import asyncio
 import os
 from platform import system
 
@@ -8,12 +9,13 @@ if __name__ == "__main__":
     if system() == "Windows":
         LOGGER.info("Windows system detected thus not installing uvloop")
     else:
-        LOGGER.info("Attempting to install uvloop")
         try:
-            os.system("pip3 install uvloop")
             import uvloop
-            uvloop.install()
-            LOGGER.info("Installed uvloop continuing the process")
-        except:
-            LOGGER.info("Failed to install uvloop continuing the process")
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            LOGGER.info("uvloop activated")
+        except Exception:
+            LOGGER.info("uvloop not available, using default event loop")
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     Gojo().run()
