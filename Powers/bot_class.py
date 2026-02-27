@@ -12,7 +12,7 @@ from Powers import (
     API_HASH, API_ID, BOT_TOKEN,
     LOG_DATETIME, LOGFILE, LOGGER,
     MESSAGE_DUMP, NO_LOAD, UPTIME, WORKERS,
-    load_cmds, scheduler,
+    load_cmds, load_aiogram_routers, scheduler,
     aiogram_bot, aiogram_dp,
     tele_client,
 )
@@ -28,12 +28,16 @@ INITIAL_LOCK = RLock()
 class Gojo(Client):
     """
     Main bot class.
-    Pyrogram  — primary client (handles all @app.on_message plugins)
-    Telethon  — bot token client (for Telethon-specific plugins)
-    Aiogram   — bot token client (for Aiogram router plugins)
-
-    All plugins are loaded from Powers/plugins/ folder automatically.
-    Nothing extra needed in __main__.py
+    ✅ Pyrogram  — @Gojo.on_message plugins (auto loaded from plugins/)
+    ✅ Telethon  — @bot.on(events...) plugins (auto loaded from plugins/)
+    ✅ Aiogram   — router plugins (auto loaded — bas plugin vich router rakh do)
+    
+    Koi naya plugin banana ho:
+    - Powers/plugins/myplugin.py banao
+    - Pyrogram lyi: @Gojo.on_message use karo
+    - Aiogram lyi: router = Router() banao + handlers likho — AUTO load hoga
+    - Telethon lyi: @tele_client.on(events...) use karo
+    - Bas! Kuch aur nahi karna
     """
 
     def __init__(self):
@@ -45,10 +49,6 @@ class Gojo(Client):
             api_hash=API_HASH,
             workers=WORKERS,
         )
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # START — all 3 clients
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     async def start(self, use_qr=False, except_ids=[]):
 
@@ -64,13 +64,11 @@ class Gojo(Client):
         Config.BOT_ID       = meh.id
         Config.BOT_NAME     = meh.first_name
         Config.BOT_USERNAME = meh.username
-
         LOGGER.info(f"✅ Pyrogram v{__version__} (Layer {layer}) — @{meh.username}")
-        LOGGER.info(f"   Python: {python_version()}")
 
         startmsg = await self.send_message(MESSAGE_DUMP, "<i>⏳ Starting all clients...</i>")
 
-        # ── 2. TELETHON (bot token, no string session) ────────────────────────
+        # ── 2. TELETHON ───────────────────────────────────────────────────────
         try:
             await tele_client.start(bot_token=BOT_TOKEN)
             tele_me = await tele_client.get_me()
@@ -78,9 +76,11 @@ class Gojo(Client):
             tele_status = f"🟢 Telethon — @{tele_me.username}"
         except Exception as e:
             LOGGER.error(f"❌ Telethon failed: {e}")
-            tele_status = f"🔴 Telethon — failed ({e})"
+            tele_status = f"🔴 Telethon — failed"
 
-        # ── 3. AIOGRAM (background polling task) ─────────────────────────────
+        # ── 3. AIOGRAM — auto load all routers from plugins/ ──────────────────
+        # Koi manually include_router nahi karna — sab auto hoga
+        load_aiogram_routers()
         try:
             self._aiogram_task = asyncio.create_task(
                 aiogram_dp.start_polling(aiogram_bot, handle_signals=False)
@@ -89,9 +89,9 @@ class Gojo(Client):
             aiogram_status = "🟢 Aiogram — polling"
         except Exception as e:
             LOGGER.error(f"❌ Aiogram failed: {e}")
-            aiogram_status = f"🔴 Aiogram — failed ({e})"
+            aiogram_status = f"🔴 Aiogram — failed"
 
-        # ── Load plugins (from Powers/plugins/ — auto-detected) ───────────────
+        # ── Load Pyrogram plugins + help menu ─────────────────────────────────
         cmd_list = await load_cmds(await all_plugins())
         await load_support_users()
         await cache_support()
@@ -122,20 +122,14 @@ class Gojo(Client):
             f"<b>Python:</b> <code>{python_version()}</code>\n\n"
             f"<b>Loaded Plugins:</b>\n<i>{cmd_list}</i>",
         )
-
-        LOGGER.info("✅ All clients started successfully!\n")
-
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    # STOP — graceful shutdown all 3
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        LOGGER.info("✅ All clients started!\n")
 
     async def stop(self):
         runtime = strftime("%Hh %Mm %Ss", gmtime(t() - UPTIME))
         LOGGER.info("Stopping all clients...")
-
         scheduler.remove_all_jobs()
 
-        # ── Stop Aiogram ──────────────────────────────────────────────────────
+        # Stop Aiogram
         if hasattr(self, "_aiogram_task"):
             self._aiogram_task.cancel()
             try:
@@ -145,18 +139,18 @@ class Gojo(Client):
         try:
             await aiogram_bot.session.close()
             LOGGER.info("✅ Aiogram stopped.")
-        except Exception as e:
-            LOGGER.warning(f"Aiogram session close warning: {e}")
+        except Exception:
+            pass
 
-        # ── Stop Telethon ─────────────────────────────────────────────────────
+        # Stop Telethon
         try:
             if tele_client.is_connected():
                 await tele_client.disconnect()
                 LOGGER.info("✅ Telethon disconnected.")
-        except Exception as e:
-            LOGGER.warning(f"Telethon disconnect warning: {e}")
+        except Exception:
+            pass
 
-        # ── Upload logs + stop Pyrogram ───────────────────────────────────────
+        # Upload logs + stop Pyrogram
         try:
             await self.send_document(
                 MESSAGE_DUMP,
@@ -172,8 +166,4 @@ class Gojo(Client):
 
         await super().stop()
         MongoDB.close()
-
-        LOGGER.info(
-            f"✅ All clients stopped cleanly.\n"
-            f"   Runtime: {runtime}"
-      )
+        LOGGER.info(f"✅ Stopped cleanly. Runtime: {runtime}")
