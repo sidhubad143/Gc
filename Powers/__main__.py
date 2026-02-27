@@ -5,7 +5,6 @@ from Powers import LOGGER
 from Powers.bot_class import Gojo
 
 if __name__ == "__main__":
-    # ── uvloop for faster async (Linux only) ──────────────────────────────────
     if system() == "Windows":
         LOGGER.info("Windows detected — skipping uvloop.")
     else:
@@ -16,7 +15,6 @@ if __name__ == "__main__":
         except ImportError:
             LOGGER.info("uvloop not installed — using default event loop.")
 
-    # ── Start bot ─────────────────────────────────────────────────────────────
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     Gojo().run()
