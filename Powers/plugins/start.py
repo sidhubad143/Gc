@@ -23,24 +23,6 @@ from Powers.utils.start_utils import (gen_cmds_kb, gen_start_kb, get_help_msg,
 from Powers.utils.string import encode_decode
 
 
-@Gojo.on_message(
-    command("donate") & (filters.group | filters.private),
-)
-async def donate(_, m: Message):
-    cpt = """
-Hey Thanks for your thought of donating me!
-When you donate, all the fund goes towards my development which makes on fast and responsive.
-Your donation might also me get me a new feature or two, which I wasn't able to get due to server limitations.
-
-All the fund would be put into my services such as database, storage and hosting!
-
-You can donate by contacting my owner: [Captain D. Ezio](http://t.me/iamgojoof6eyes)
-     """
-
-    await m.reply_photo(photo=str(choice(StartPic)), caption=cpt)
-    return
-
-
 @Gojo.on_callback_query(filters.regex("^close_admin$"))
 async def close_admin_callback(_, q: CallbackQuery):
     user_id = q.from_user.id
@@ -458,3 +440,4 @@ async def give_bot_staffs(c: Gojo, q: CallbackQuery):
 async def delete_back(_, q: CallbackQuery):
     await q.message.delete()
     return
+  
