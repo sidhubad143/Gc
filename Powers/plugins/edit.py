@@ -1,7 +1,3 @@
-"""
-edit.py — Anti Edit Plugin (Aiogram)
-"""
-
 import asyncio
 
 from aiogram import Bot, Router, F
@@ -15,8 +11,9 @@ from Powers.utils.admin_check_aiogram import is_admin_silent
 router = Router()
 
 
-def _name(user) -> str:
-    return mention_html(user.first_name or "User", user.id)
+async def _name(user) -> str:
+    """mention_html is async in this repo — must await it."""
+    return await mention_html(user.first_name or "User", user.id)
 
 
 @router.edited_message(F.text & F.chat.type.in_({"group", "supergroup"}))
@@ -29,7 +26,7 @@ async def anti_edit(message: Message, bot: Bot):
         await message.delete()
         m = await bot.send_message(
             message.chat.id,
-            f"✏️ {_name(message.from_user)} ᴇᴅɪᴛᴇᴅ ᴍꜱɢ ᴅᴇʟᴇᴛᴇᴅ 🚫",
+            f"✏️ {await _name(message.from_user)} ᴇᴅɪᴛᴇᴅ ᴍꜱɢ ᴅᴇʟᴇᴛᴇᴅ 🚫",
             parse_mode=ParseMode.HTML
         )
         await asyncio.sleep(10)
