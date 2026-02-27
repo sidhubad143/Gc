@@ -14,7 +14,65 @@ _DIR = os.path.dirname(__file__)
 NSFW_MODEL_PATH   = os.path.join(_DIR, 'nsfw_model',   'nsfw_mobilenet2.224x224.h5')
 OBJECT_MODEL_PATH = os.path.join(_DIR, 'object_model', 'ssd_mobilenet_v2_coco.h5')
 
+# Media dir — same as scrapped/ in repo root
+MEDIA_DIR = os.path.join(_DIR, '..', '..', 'scrapped')
+
 IMAGE_DIM = 224
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MEDIA HELPERS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def get_media_path(user_id: int, file_id: str) -> str:
+    """
+    Standardized path for downloaded images.
+
+    Usage in plugin:
+        path = get_media_path(message.from_user.id, file.file_id)
+        await client.download_media(message, file_name=path)
+        result = detect_nsfw(path)   # auto-deletes after scan
+    """
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    return os.path.join(MEDIA_DIR, f"{user_id}_{file_id}.jpg")
+
+
+def clean_media_folder() -> bool:
+    """
+    MEDIA_DIR (scrapped/) saaf karda — sari downloaded images delete.
+    __init__.py startup te already scrapped/ clean hundi hai,
+    par bot chal rahe vich bhi manually call kar sakte:
+        from Powers.utils.predict import clean_media_folder
+        clean_media_folder()
+    """
+    try:
+        if not os.path.exists(MEDIA_DIR):
+            os.makedirs(MEDIA_DIR, exist_ok=True)
+            return True
+
+        deleted = 0
+        for filename in os.listdir(MEDIA_DIR):
+            file_path = os.path.join(MEDIA_DIR, filename)
+            try:
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+                    deleted += 1
+                elif os.path.isdir(file_path):
+                    os.rmdir(file_path)
+            except Exception:
+                pass
+
+        from Powers import LOGGER
+        LOGGER.info(f"[clean_media_folder] Deleted {deleted} files from {MEDIA_DIR}")
+        return True
+
+    except Exception as e:
+        try:
+            from Powers import LOGGER
+            LOGGER.error(f"[clean_media_folder] Failed: {e}")
+        except Exception:
+            pass
+        return False
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # COCO CLASS IDs for weapons/drugs detection
@@ -207,3 +265,24 @@ def detect_nsfw(image_path: str) -> dict:
             os.remove(image_path)
         except Exception:
             pass
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# USAGE EXAMPLE (bot plugin vich)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# from Powers.utils.predict import detect_nsfw
+#
+# result = detect_nsfw("/tmp/photo.jpg")
+#
+# if result['is_nsfw']:
+#     await message.delete()
+#     await bot.send_message(chat_id, "🔞 NSFW content not allowed!")
+#
+# if result['has_weapon']:
+#     await message.delete()
+#     await bot.send_message(chat_id, "🔫 Weapon detected — not allowed!")
+#
+# if result['has_drugs']:
+#     await message.delete()
+#     await bot.send_message(chat_id, "💊 Drug-related content — not allowed!")
