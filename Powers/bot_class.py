@@ -1,3 +1,4 @@
+import asyncio
 from platform import python_version
 from threading import RLock
 from time import gmtime, strftime
@@ -7,9 +8,14 @@ from pyrogram import Client, __version__
 from pyrogram.raw.all import layer
 from pyrogram.types import BotCommand
 
-from Powers import (API_HASH, API_ID, BOT_TOKEN, LOG_DATETIME, LOGFILE, LOGGER,
-                    MESSAGE_DUMP, NO_LOAD, UPTIME, WORKERS, load_cmds,
-                    scheduler)
+from Powers import (
+    API_HASH, API_ID, BOT_TOKEN,
+    LOG_DATETIME, LOGFILE, LOGGER,
+    MESSAGE_DUMP, NO_LOAD, UPTIME, WORKERS,
+    load_cmds, scheduler,
+    aiogram_bot, aiogram_dp,
+    tele_client,
+)
 from Powers.database import MongoDB
 from Powers.plugins import all_plugins
 from Powers.plugins.scheduled_jobs import *
@@ -19,13 +25,18 @@ from Powers.vars import Config
 INITIAL_LOCK = RLock()
 
 
-
 class Gojo(Client):
-    """Starts the Pyrogram Client on the Bot Token when we do 'python3 -m Powers'"""
+    """
+    Main bot class.
+    Pyrogram  — primary client (handles all @app.on_message plugins)
+    Telethon  — bot token client (for Telethon-specific plugins)
+    Aiogram   — bot token client (for Aiogram router plugins)
+
+    All plugins are loaded from Powers/plugins/ folder automatically.
+    Nothing extra needed in __main__.py
+    """
 
     def __init__(self):
-        # name = Powers
-
         super().__init__(
             "Gojo_Satoru",
             bot_token=BOT_TOKEN,
@@ -35,75 +46,134 @@ class Gojo(Client):
             workers=WORKERS,
         )
 
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # START — all 3 clients
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
     async def start(self, use_qr=False, except_ids=[]):
-        """Start the bot."""
+
+        # ── 1. PYROGRAM ───────────────────────────────────────────────────────
         await super().start(use_qr=use_qr, except_ids=except_ids)
-        await self.set_bot_commands(
-            [
-                BotCommand(
-                    "start", "To check weather the bot is alive or not"),
-                BotCommand("help", "To get help menu"),
-                BotCommand("donate", "To buy me a coffee"),
-                BotCommand("bug", "To report bugs")
-            ]
-        )
-        meh = await self.get_me()  # Get bot info from pyrogram client
-        LOGGER.info("Starting bot...")
-        Config.BOT_ID = meh.id
-        Config.BOT_NAME = meh.first_name
+        await self.set_bot_commands([
+            BotCommand("start",  "Check if bot is alive"),
+            BotCommand("help",   "Get help menu"),
+            BotCommand("donate", "Buy me a coffee"),
+            BotCommand("bug",    "Report a bug"),
+        ])
+        meh = await self.get_me()
+        Config.BOT_ID       = meh.id
+        Config.BOT_NAME     = meh.first_name
         Config.BOT_USERNAME = meh.username
-        startmsg = await self.send_message(MESSAGE_DUMP, "<i>Starting Bot...</i>")
 
-        # Show in Log that bot has started
-        LOGGER.info(
-            f"Pyrogram v{__version__} (Layer - {layer}) started on {meh.username}",
-        )
-        LOGGER.info(f"Python Version: {python_version()}\n")
+        LOGGER.info(f"✅ Pyrogram v{__version__} (Layer {layer}) — @{meh.username}")
+        LOGGER.info(f"   Python: {python_version()}")
 
-        # Get cmds and keys
+        startmsg = await self.send_message(MESSAGE_DUMP, "<i>⏳ Starting all clients...</i>")
+
+        # ── 2. TELETHON (bot token, no string session) ────────────────────────
+        try:
+            await tele_client.start(bot_token=BOT_TOKEN)
+            tele_me = await tele_client.get_me()
+            LOGGER.info(f"✅ Telethon started — @{tele_me.username}")
+            tele_status = f"🟢 Telethon — @{tele_me.username}"
+        except Exception as e:
+            LOGGER.error(f"❌ Telethon failed: {e}")
+            tele_status = f"🔴 Telethon — failed ({e})"
+
+        # ── 3. AIOGRAM (background polling task) ─────────────────────────────
+        try:
+            self._aiogram_task = asyncio.create_task(
+                aiogram_dp.start_polling(aiogram_bot, handle_signals=False)
+            )
+            LOGGER.info("✅ Aiogram polling started.")
+            aiogram_status = "🟢 Aiogram — polling"
+        except Exception as e:
+            LOGGER.error(f"❌ Aiogram failed: {e}")
+            aiogram_status = f"🔴 Aiogram — failed ({e})"
+
+        # ── Load plugins (from Powers/plugins/ — auto-detected) ───────────────
         cmd_list = await load_cmds(await all_plugins())
         await load_support_users()
         await cache_support()
-        LOGGER.info(f"Dev Users: {SUPPORT_USERS['Dev']}")
-        LOGGER.info(f"Sudo Users: {SUPPORT_USERS['Sudo']}")
-        LOGGER.info(f"Whitelist users: {SUPPORT_USERS['White']}")
-        LOGGER.info(f"Plugins Loaded: {cmd_list}")
-        if BDB_URI:
-            scheduler.add_job(send_wishish, 'cron', [
-                self], hour=0, minute=0, second=0)
+
+        from Powers import SUPPORT_USERS
+        LOGGER.info(f"Dev Users       : {SUPPORT_USERS['Dev']}")
+        LOGGER.info(f"Sudo Users      : {SUPPORT_USERS['Sudo']}")
+        LOGGER.info(f"Whitelist Users : {SUPPORT_USERS['White']}")
+        LOGGER.info(f"Plugins Loaded  : {cmd_list}")
+
+        # ── Scheduler ─────────────────────────────────────────────────────────
+        if Config.BDB_URI:
+            scheduler.add_job(send_wishish, "cron", [self], hour=0, minute=0, second=0)
             scheduler.start()
-        # Send a message to MESSAGE_DUMP telling that the
-        # bot has started and has loaded all plugins!
+
+        # ── Startup message ───────────────────────────────────────────────────
         await startmsg.edit_text(
-            (
-                f"<b><i>@{meh.username} started on Pyrogram v{__version__} (Layer - {layer})</i></b>\n"
-                f"\n<b>Python:</b> <u>{python_version()}</u>\n"
-                "\n<b>Loaded Plugins:</b>\n"
-                f"<i>{cmd_list}</i>\n"
-            ),
+            f"<b>✅ Gojo Satoru Started!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🤖 <b>Bot:</b> @{meh.username}\n"
+            f"🆔 <b>ID:</b> <code>{meh.id}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Libraries:</b>\n"
+            f"  🟢 Pyrogram v{__version__} (Layer {layer})\n"
+            f"  {tele_status}\n"
+            f"  {aiogram_status}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Python:</b> <code>{python_version()}</code>\n\n"
+            f"<b>Loaded Plugins:</b>\n<i>{cmd_list}</i>",
         )
 
-        LOGGER.info("Bot Started Successfully!\n")
+        LOGGER.info("✅ All clients started successfully!\n")
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # STOP — graceful shutdown all 3
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     async def stop(self):
-        """Stop the bot and send a message to MESSAGE_DUMP telling that the bot has stopped."""
         runtime = strftime("%Hh %Mm %Ss", gmtime(t() - UPTIME))
-        LOGGER.info("Uploading logs before stopping...!\n")
-        # Send Logs to MESSAGE_DUMP and LOG_CHANNEL
+        LOGGER.info("Stopping all clients...")
+
         scheduler.remove_all_jobs()
-        target = MESSAGE_DUMP or OWNER_ID
-        await self.send_document(
-            target,
-            document=LOGFILE,
-            caption=(
-                "Bot Stopped!\n\n" f"Uptime: {runtime}\n" f"<code>{LOG_DATETIME}</code>"
-            ),
-        )
+
+        # ── Stop Aiogram ──────────────────────────────────────────────────────
+        if hasattr(self, "_aiogram_task"):
+            self._aiogram_task.cancel()
+            try:
+                await self._aiogram_task
+            except asyncio.CancelledError:
+                pass
+        try:
+            await aiogram_bot.session.close()
+            LOGGER.info("✅ Aiogram stopped.")
+        except Exception as e:
+            LOGGER.warning(f"Aiogram session close warning: {e}")
+
+        # ── Stop Telethon ─────────────────────────────────────────────────────
+        try:
+            if tele_client.is_connected():
+                await tele_client.disconnect()
+                LOGGER.info("✅ Telethon disconnected.")
+        except Exception as e:
+            LOGGER.warning(f"Telethon disconnect warning: {e}")
+
+        # ── Upload logs + stop Pyrogram ───────────────────────────────────────
+        try:
+            await self.send_document(
+                MESSAGE_DUMP,
+                document=LOGFILE,
+                caption=(
+                    f"🔴 <b>Bot Stopped!</b>\n"
+                    f"⏱ Uptime: <code>{runtime}</code>\n"
+                    f"📅 <code>{LOG_DATETIME}</code>"
+                ),
+            )
+        except Exception:
+            pass
+
         await super().stop()
         MongoDB.close()
+
         LOGGER.info(
-            f"""Bot Stopped.
-            Logs have been uploaded to the MESSAGE_DUMP Group!
-            Runtime: {runtime}s\n
-        """,
-        )
+            f"✅ All clients stopped cleanly.\n"
+            f"   Runtime: {runtime}"
+      )
