@@ -3,7 +3,16 @@ from secrets import choice
 from traceback import format_exc
 from typing import List
 
-from pyrogram import emoji, enums, filters
+from pyrogram import enums, filters
+
+# pyrogram.emoji removed in newer versions — using unicode directly
+class emoji:
+    EYES = "👀"
+    WAVING_HAND = "👋"
+    PARTY_POPPER = "🎉"
+    BROKEN_HEART = "💔"
+    SMILING_FACE_WITH_HEART_EYES = "😍"
+    LOUDLY_CRYING_FACE = "😭"
 from pyrogram.errors import ChannelPrivate, ChatAdminRequired, RPCError
 from pyrogram.types import Message, User
 
