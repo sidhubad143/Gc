@@ -5,7 +5,7 @@ from pyrogram import enums, filters
 from pyrogram.enums import ChatMemberStatus as CMS
 from pyrogram.enums import ChatType
 from pyrogram.errors import (MediaCaptionTooLong, MessageNotModified,
-                             PeerIdInvalid, QueryIdInvalid, RPCError, UserIsBlocked)
+                             QueryIdInvalid, RPCError, UserIsBlocked)
 from pyrogram.types import (CallbackQuery, InlineKeyboardButton,
                             InlineKeyboardMarkup, Message)
 
@@ -71,7 +71,6 @@ async def start(c: Gojo, m: Message):
                     caption=help_msg,
                     parse_mode=enums.ParseMode.MARKDOWN,
                     reply_markup=help_kb,
-                    reply_to_message_id=m.id,
                 )
                 return
             if len(arg.split("_", 1)) >= 2:
@@ -119,38 +118,29 @@ async def start(c: Gojo, m: Message):
                         return
 
         try:
-            name = m.from_user.first_name
-            cpt = (
-                f"**Hey {name}! I am {c.me.first_name} ✨**\n\n"
-                f"🛡 **Group Protection Features:**\n"
-                f"• 🔒 **Locks** — Lock messages, media, stickers, links & more\n"
-                f"• 🚫 **Anti-Spam** — Flood control, global ban system\n"
-                f"• 👋 **Greetings** — Custom welcome & goodbye messages\n"
-                f"• 🔞 **NSFW Filter** — Auto-detect & delete NSFW content\n"
-                f"• ✏️ **Anti-Edit** — Delete edited messages automatically\n"
-                f"• 📏 **Long Msg** — Delete messages exceeding word limit\n"
-                f"• 🤖 **Captcha** — Verify new members before they can chat\n"
-                f"• ✅ **Approve** — Whitelist trusted users from restrictions\n"
-                f"• ⚠️ **Warnings** — Warn system with auto-action\n"
-                f"• 🔇 **Mute/Ban** — Full moderation controls\n"
-                f"• 🗒 **Notes** — Save & share group notes\n"
-                f"• 📌 **Rules** — Set & display group rules\n\n"
-                f"Use /help to explore all features!"
-            )
+            cpt = f"""
+Hey [{m.from_user.first_name}](tg://user?id={m.from_user.id})! I am {c.me.first_name} ✨.
+I'm here to help you manage your group(s)!
+Hit /help to find out more about how to use me in my full potential!
+
+Join my [News Channel](https://t.me/gojo_bots_network) to get information on all the latest updates."""
+
+            try:
+                kb = await gen_start_kb(m)
+            except Exception:
+                kb = None
             await m.reply_photo(
                 photo=str(choice(StartPic)),
                 caption=cpt,
-                reply_markup=(await gen_start_kb(m)),
+                reply_markup=kb,
             )
         except UserIsBlocked:
             LOGGER.warning(f"Bot blocked by {m.from_user.id}")
-        except PeerIdInvalid:
-            # gen_start_kb vich koi user_id button unknown — fallback without keyboard
+        except RPCError as e:
+            LOGGER.error(f"[start] reply_photo failed: {e}")
+            # Fallback — send without keyboard
             try:
-                await m.reply_photo(
-                    photo=str(choice(StartPic)),
-                    caption=cpt,
-                )
+                await m.reply_text(cpt)
             except Exception:
                 pass
     else:
@@ -167,7 +157,7 @@ async def start(c: Gojo, m: Message):
 
         await m.reply_photo(
             photo=str(choice(StartPic)),
-            caption=f"Hey! I am **{c.me.first_name}** 🛡\nAdd me as admin to protect your group!\n\nTap below to see all features in PM.",
+            caption="I'm alive :3",
             reply_markup=kb,
         )
     return
@@ -176,24 +166,13 @@ async def start(c: Gojo, m: Message):
 @Gojo.on_callback_query(filters.regex("^start_back$"))
 async def start_back(c: Gojo, q: CallbackQuery):
     try:
-        name = q.from_user.first_name
-        cpt = (
-            f"**Hey {name}! I am {c.me.first_name} ✨**\n\n"
-            f"🛡 **Group Protection Features:**\n"
-            f"• 🔒 **Locks** — Lock messages, media, stickers, links & more\n"
-            f"• 🚫 **Anti-Spam** — Flood control, global ban system\n"
-            f"• 👋 **Greetings** — Custom welcome & goodbye messages\n"
-            f"• 🔞 **NSFW Filter** — Auto-detect & delete NSFW content\n"
-            f"• ✏️ **Anti-Edit** — Delete edited messages automatically\n"
-            f"• 📏 **Long Msg** — Delete messages exceeding word limit\n"
-            f"• 🤖 **Captcha** — Verify new members before they can chat\n"
-            f"• ✅ **Approve** — Whitelist trusted users from restrictions\n"
-            f"• ⚠️ **Warnings** — Warn system with auto-action\n"
-            f"• 🔇 **Mute/Ban** — Full moderation controls\n"
-            f"• 🗒 **Notes** — Save & share group notes\n"
-            f"• 📌 **Rules** — Set & display group rules\n\n"
-            f"Use /help to explore all features!"
-        )
+        cpt = f"""
+Hey [{q.from_user.first_name}](tg://user?id={q.from_user.id})! I am {c.me.first_name} ✨.
+I'm here to help you manage your group(s)!
+Hit /help to find out more about how to use me in my full potential!
+
+Join my [News Channel](http://t.me/gojo_bots_network) to get information on all the latest updates."""
+
         await q.edit_message_caption(
             caption=cpt,
             reply_markup=(await gen_start_kb(q.message)),
@@ -210,7 +189,7 @@ async def commands_menu(c: Gojo, q: CallbackQuery):
     keyboard = ikb(ou, True)
     try:
         cpt = f"""
-Hey **[{q.from_user.first_name}](http://t.me/{q.from_user.username})**! I am {c.me.first_name}✨.
+Hey **[{q.from_user.first_name}](tg://user?id={q.from_user.id})**! I am {c.me.first_name}✨.
 I'm here to help you manage your group(s)!
 Commands available:
 × /start: Start the bot
@@ -256,7 +235,6 @@ async def help_menu(c: Gojo, m: Message):
                 caption=help_msg,
                 parse_mode=enums.ParseMode.MARKDOWN,
                 reply_markup=help_kb,
-                reply_to_message_id=m.id,
             )
         else:
 
@@ -280,7 +258,7 @@ async def help_menu(c: Gojo, m: Message):
             ou = await gen_cmds_kb(m)
             keyboard = ikb(ou, True)
             msg = f"""
-Hey **[{m.from_user.first_name}](http://t.me/{m.from_user.username})**!I am {c.me.first_name}✨.
+Hey **[{m.from_user.first_name}](tg://user?id={m.from_user.id})**!I am {c.me.first_name}✨.
 I'm here to help you manage your group(s)!
 Commands available:
 × /start: Start the bot
