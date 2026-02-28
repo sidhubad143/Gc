@@ -5,7 +5,7 @@ from pyrogram import enums, filters
 from pyrogram.enums import ChatMemberStatus as CMS
 from pyrogram.enums import ChatType
 from pyrogram.errors import (MediaCaptionTooLong, MessageNotModified,
-                             QueryIdInvalid, RPCError, UserIsBlocked)
+                             PeerIdInvalid, QueryIdInvalid, RPCError, UserIsBlocked)
 from pyrogram.types import (CallbackQuery, InlineKeyboardButton,
                             InlineKeyboardMarkup, Message)
 
@@ -71,7 +71,7 @@ async def start(c: Gojo, m: Message):
                     caption=help_msg,
                     parse_mode=enums.ParseMode.MARKDOWN,
                     reply_markup=help_kb,
-                    quote=True,
+                    reply_to_message_id=m.id,
                 )
                 return
             if len(arg.split("_", 1)) >= 2:
@@ -81,7 +81,6 @@ async def start(c: Gojo, m: Message):
                         caption=help_msg,
                         parse_mode=enums.ParseMode.MARKDOWN,
                         reply_markup=help_kb,
-                        quote=True,
                     )
                     return
                 elif arg.split("_", 1)[0] == "qr":
@@ -120,21 +119,40 @@ async def start(c: Gojo, m: Message):
                         return
 
         try:
-            cpt = f"""
-Hey [{m.from_user.first_name}](http://t.me/{m.from_user.username})! I am {c.me.first_name} ✨.
-I'm here to help you manage your group(s)!
-Hit /help to find out more about how to use me in my full potential!
-
-Join my [News Channel](https://t.me/gojo_bots_network) to get information on all the latest updates."""
-
+            name = m.from_user.first_name
+            cpt = (
+                f"**Hey {name}! I am {c.me.first_name} ✨**\n\n"
+                f"🛡 **Group Protection Features:**\n"
+                f"• 🔒 **Locks** — Lock messages, media, stickers, links & more\n"
+                f"• 🚫 **Anti-Spam** — Flood control, global ban system\n"
+                f"• 👋 **Greetings** — Custom welcome & goodbye messages\n"
+                f"• 🔞 **NSFW Filter** — Auto-detect & delete NSFW content\n"
+                f"• ✏️ **Anti-Edit** — Delete edited messages automatically\n"
+                f"• 📏 **Long Msg** — Delete messages exceeding word limit\n"
+                f"• 🤖 **Captcha** — Verify new members before they can chat\n"
+                f"• ✅ **Approve** — Whitelist trusted users from restrictions\n"
+                f"• ⚠️ **Warnings** — Warn system with auto-action\n"
+                f"• 🔇 **Mute/Ban** — Full moderation controls\n"
+                f"• 🗒 **Notes** — Save & share group notes\n"
+                f"• 📌 **Rules** — Set & display group rules\n\n"
+                f"Use /help to explore all features!"
+            )
             await m.reply_photo(
                 photo=str(choice(StartPic)),
                 caption=cpt,
                 reply_markup=(await gen_start_kb(m)),
-                quote=True,
             )
         except UserIsBlocked:
             LOGGER.warning(f"Bot blocked by {m.from_user.id}")
+        except PeerIdInvalid:
+            # gen_start_kb vich koi user_id button unknown — fallback without keyboard
+            try:
+                await m.reply_photo(
+                    photo=str(choice(StartPic)),
+                    caption=cpt,
+                )
+            except Exception:
+                pass
     else:
         kb = InlineKeyboardMarkup(
             [
@@ -149,9 +167,8 @@ Join my [News Channel](https://t.me/gojo_bots_network) to get information on all
 
         await m.reply_photo(
             photo=str(choice(StartPic)),
-            caption="I'm alive :3",
+            caption=f"Hey! I am **{c.me.first_name}** 🛡\nAdd me as admin to protect your group!\n\nTap below to see all features in PM.",
             reply_markup=kb,
-            quote=True,
         )
     return
 
@@ -159,13 +176,24 @@ Join my [News Channel](https://t.me/gojo_bots_network) to get information on all
 @Gojo.on_callback_query(filters.regex("^start_back$"))
 async def start_back(c: Gojo, q: CallbackQuery):
     try:
-        cpt = f"""
-Hey [{q.from_user.first_name}](http://t.me/{q.from_user.username})! I am {c.me.first_name} ✨.
-I'm here to help you manage your group(s)!
-Hit /help to find out more about how to use me in my full potential!
-
-Join my [News Channel](http://t.me/gojo_bots_network) to get information on all the latest updates."""
-
+        name = q.from_user.first_name
+        cpt = (
+            f"**Hey {name}! I am {c.me.first_name} ✨**\n\n"
+            f"🛡 **Group Protection Features:**\n"
+            f"• 🔒 **Locks** — Lock messages, media, stickers, links & more\n"
+            f"• 🚫 **Anti-Spam** — Flood control, global ban system\n"
+            f"• 👋 **Greetings** — Custom welcome & goodbye messages\n"
+            f"• 🔞 **NSFW Filter** — Auto-detect & delete NSFW content\n"
+            f"• ✏️ **Anti-Edit** — Delete edited messages automatically\n"
+            f"• 📏 **Long Msg** — Delete messages exceeding word limit\n"
+            f"• 🤖 **Captcha** — Verify new members before they can chat\n"
+            f"• ✅ **Approve** — Whitelist trusted users from restrictions\n"
+            f"• ⚠️ **Warnings** — Warn system with auto-action\n"
+            f"• 🔇 **Mute/Ban** — Full moderation controls\n"
+            f"• 🗒 **Notes** — Save & share group notes\n"
+            f"• 📌 **Rules** — Set & display group rules\n\n"
+            f"Use /help to explore all features!"
+        )
         await q.edit_message_caption(
             caption=cpt,
             reply_markup=(await gen_start_kb(q.message)),
@@ -221,14 +249,14 @@ async def help_menu(c: Gojo, m: Message):
         if m.chat.type == ChatType.PRIVATE:
             if len(help_msg) >= 1026:
                 await m.reply_text(
-                    help_msg, parse_mode=enums.ParseMode.MARKDOWN, quote=True
+                    help_msg, parse_mode=enums.ParseMode.MARKDOWN
                 )
             await m.reply_photo(
                 photo=str(choice(StartPic)),
                 caption=help_msg,
                 parse_mode=enums.ParseMode.MARKDOWN,
                 reply_markup=help_kb,
-                quote=True,
+                reply_to_message_id=m.id,
             )
         else:
 
@@ -440,4 +468,3 @@ async def give_bot_staffs(c: Gojo, q: CallbackQuery):
 async def delete_back(_, q: CallbackQuery):
     await q.message.delete()
     return
-  
