@@ -20,6 +20,22 @@ from Powers.database.flood_db import Floods
 from Powers.supports import get_support_staff
 from Powers.utils.caching import ADMIN_CACHE, admin_cache_reload
 
+def _get_forward_user(m):
+    """Replaces deprecated m.forward_from"""
+    try:
+        return m.forward_origin.sender_user if m.forward_origin else None
+    except AttributeError:
+        return None
+
+def _get_forward_chat(m):
+    """Replaces deprecated m.forward_from_chat"""
+    try:
+        return m.forward_origin.chat if m.forward_origin else None
+    except AttributeError:
+        return None
+
+
+
 
 def command(
         commands: Union[str, List[str]],
@@ -42,7 +58,7 @@ def command(
         if m and not m.from_user and not m.chat.is_admin:
             return False
 
-        if any([m.forward_from_chat, m.forward_from]):
+        if any([_get_forward_chat(m), _get_forward_user(m)]):
             return False
 
         if m.from_user:
