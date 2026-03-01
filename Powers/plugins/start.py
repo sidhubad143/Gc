@@ -23,24 +23,6 @@ from Powers.utils.start_utils import (gen_cmds_kb, gen_start_kb, get_help_msg,
 from Powers.utils.string import encode_decode
 
 
-@Gojo.on_message(
-    command("donate") & (filters.group | filters.private),
-)
-async def donate(_, m: Message):
-    cpt = """
-Hey Thanks for your thought of donating me!
-When you donate, all the fund goes towards my development which makes on fast and responsive.
-Your donation might also me get me a new feature or two, which I wasn't able to get due to server limitations.
-
-All the fund would be put into my services such as database, storage and hosting!
-
-You can donate by contacting my owner: [Captain D. Ezio](http://t.me/iamgojoof6eyes)
-     """
-
-    await m.reply_photo(photo=str(choice(StartPic)), caption=cpt)
-    return
-
-
 @Gojo.on_callback_query(filters.regex("^close_admin$"))
 async def close_admin_callback(_, q: CallbackQuery):
     user_id = q.from_user.id
@@ -139,20 +121,30 @@ async def start(c: Gojo, m: Message):
 
         try:
             cpt = f"""
-Hey [{m.from_user.first_name}](http://t.me/{m.from_user.username})! I am {c.me.first_name} ✨.
+Hey [{m.from_user.first_name}](tg://user?id={m.from_user.id})! I am {c.me.first_name} ✨.
 I'm here to help you manage your group(s)!
 Hit /help to find out more about how to use me in my full potential!
 
 Join my [News Channel](https://t.me/gojo_bots_network) to get information on all the latest updates."""
 
+            try:
+                kb = await gen_start_kb(m)
+            except Exception:
+                kb = None
             await m.reply_photo(
                 photo=str(choice(StartPic)),
                 caption=cpt,
-                reply_markup=(await gen_start_kb(m)),
+                reply_markup=kb,
                 quote=True,
             )
         except UserIsBlocked:
             LOGGER.warning(f"Bot blocked by {m.from_user.id}")
+        except RPCError as e:
+            LOGGER.error(f"[start] reply_photo failed: {e}")
+            try:
+                await m.reply_text(cpt)
+            except Exception:
+                pass
     else:
         kb = InlineKeyboardMarkup(
             [
@@ -178,7 +170,7 @@ Join my [News Channel](https://t.me/gojo_bots_network) to get information on all
 async def start_back(c: Gojo, q: CallbackQuery):
     try:
         cpt = f"""
-Hey [{q.from_user.first_name}](http://t.me/{q.from_user.username})! I am {c.me.first_name} ✨.
+Hey [{q.from_user.first_name}](tg://user?id={q.from_user.id})! I am {c.me.first_name} ✨.
 I'm here to help you manage your group(s)!
 Hit /help to find out more about how to use me in my full potential!
 
@@ -200,7 +192,7 @@ async def commands_menu(c: Gojo, q: CallbackQuery):
     keyboard = ikb(ou, True)
     try:
         cpt = f"""
-Hey **[{q.from_user.first_name}](http://t.me/{q.from_user.username})**! I am {c.me.first_name}✨.
+Hey **[{q.from_user.first_name}](tg://user?id={q.from_user.id})**! I am {c.me.first_name}✨.
 I'm here to help you manage your group(s)!
 Commands available:
 × /start: Start the bot
@@ -270,7 +262,7 @@ async def help_menu(c: Gojo, m: Message):
             ou = await gen_cmds_kb(m)
             keyboard = ikb(ou, True)
             msg = f"""
-Hey **[{m.from_user.first_name}](http://t.me/{m.from_user.username})**!I am {c.me.first_name}✨.
+Hey **[{m.from_user.first_name}](tg://user?id={m.from_user.id})**!I am {c.me.first_name}✨.
 I'm here to help you manage your group(s)!
 Commands available:
 × /start: Start the bot
