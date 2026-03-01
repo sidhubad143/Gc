@@ -39,36 +39,23 @@ async def gen_start_kb(q: Message or CallbackQuery):
         [
             [
                 (
-                    "➕ Add me to a chat!",
+                    "🛡 Protect My Group",
                     f"https://t.me/{Config.BOT_USERNAME}?startgroup=new",
                     "url",
                 ),
-                ("Bot Staffs 🚔", "give_bot_staffs"),
             ],
             [
-                ("📚 Commands & Help", "commands"),
-                ("Bot info 👾", "bot_curr_info"),
+                ("📋 Commands", "commands"),
+                ("⚡️ Bot Info", "bot_curr_info"),
             ],
             [
-                (
-                    "🗃️ Source Code",
-                    "https://github.com/Gojo-Bots/Gojo_Satoru",
-                    "url",
-                ),
                 (
                     "Owner ❤️",
                     "https://t.me/BadMundaXD",
                     "url",
                 ),
-            ],
-            [
                 (
-                    "❗️ Essential",
-                    "https://t.me/+PcVYvdzNt4E1YjM1",
-                    "url",
-                ),
-                (
-                    "Powered by ⚡️",
+                    "📣 Updates",
                     f"https://{SUPPORT_CHANNEL}.t.me",
                     "url",
                 ),
@@ -254,12 +241,14 @@ async def get_help_msg(c: Gojo, m: Message or CallbackQuery, help_option: str):
 
     else:
         mes = m.message if isinstance(m, CallbackQuery) else m
-        help_msg = f"""
-Hey **[{mes.from_user.first_name}](http://t.me/{mes.from_user.username})**!I am {c.me.first_name}✨.
-I'm here to help you manage your groups!
-Commands available:
-× /start: Start the bot
-× /help: Give's you this message."""
+        help_msg = (
+            f"Hey **[{mes.from_user.first_name}](tg://user?id={mes.from_user.id})**!\n\n"
+            f"I'm **{c.me.first_name}** 🛡, your group's security bot — "
+            f"keeping chats clean and safe.\n\n"
+            f"**Commands available:**\n"
+            f"× /start — Start the bot\n"
+            f"× /help — Show this menu"
+        )
         ou = await gen_cmds_kb(m)
         help_kb = ikb(ou, True)
 
