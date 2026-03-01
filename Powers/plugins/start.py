@@ -138,12 +138,14 @@ async def start(c: Gojo, m: Message):
                         return
 
         try:
-            cpt = f"""
-Hey [{m.from_user.first_name}](http://t.me/{m.from_user.username})! I am {c.me.first_name} ✨.
-I'm here to help you manage your group(s)!
-Hit /help to find out more about how to use me in my full potential!
-
-Join my [News Channel](https://t.me/gojo_bots_network) to get information on all the latest updates."""
+            cpt = (
+                f"Hey [{m.from_user.first_name}](tg://user?id={m.from_user.id})! \n\n"
+                f"I'm **{c.me.first_name}** 🛡, your group's security bot —\n"
+                f"keeping chats **clean and safe**.\n\n"
+                f"📣 Stay informed with instant alerts.\n"
+                f"✅ Add me now and I'll start protecting your group!\n\n"
+                f"Hit /help to explore all security features."
+            )
 
             await m.reply_photo(
                 photo=str(choice(StartPic)),
@@ -167,7 +169,11 @@ Join my [News Channel](https://t.me/gojo_bots_network) to get information on all
 
         await m.reply_photo(
             photo=str(choice(StartPic)),
-            caption="I'm alive :3",
+            caption=(
+                f"🛡 **{c.me.first_name}** is online and ready to protect!\n\n"
+                f"📣 Stay informed with instant alerts.\n"
+                f"✅ Add me now and I'll start protecting your group!"
+            ),
             reply_markup=kb,
             quote=True,
         )
@@ -177,12 +183,13 @@ Join my [News Channel](https://t.me/gojo_bots_network) to get information on all
 @Gojo.on_callback_query(filters.regex("^start_back$"))
 async def start_back(c: Gojo, q: CallbackQuery):
     try:
-        cpt = f"""
-Hey [{q.from_user.first_name}](http://t.me/{q.from_user.username})! I am {c.me.first_name} ✨.
-I'm here to help you manage your group(s)!
-Hit /help to find out more about how to use me in my full potential!
-
-Join my [News Channel](http://t.me/gojo_bots_network) to get information on all the latest updates."""
+        cpt = (
+            f"Hey [{q.from_user.first_name}](tg://user?id={q.from_user.id})! \n\n"
+            f"I'm **{c.me.first_name}** 🛡, your group's security bot —\n"
+            f"keeping chats **clean and safe**.\n\n"
+            f"📣 Stay informed with instant alerts.\n"
+            f"✅ Add me now and I'll start protecting your group!"
+        )
 
         await q.edit_message_caption(
             caption=cpt,
@@ -199,15 +206,14 @@ async def commands_menu(c: Gojo, q: CallbackQuery):
     ou = await gen_cmds_kb(q.message)
     keyboard = ikb(ou, True)
     try:
-        cpt = f"""
-Hey **[{q.from_user.first_name}](http://t.me/{q.from_user.username})**! I am {c.me.first_name}✨.
-I'm here to help you manage your group(s)!
-Commands available:
-× /start: Start the bot
-× /help: Give's you this message.
-
-You can use {", ".join(PREFIX_HANDLER)} as your prefix handler
-"""
+        cpt = (
+            f"Hey **[{q.from_user.first_name}](tg://user?id={q.from_user.id})**!\n\n"
+            f"🛡 **{c.me.first_name}** — Group Security Bot\n\n"
+            f"**Commands available:**\n"
+            f"× /start — Start the bot\n"
+            f"× /help — Show help menu\n\n"
+            f"Prefix: `{', '.join(PREFIX_HANDLER)}`"
+        )
 
         await q.edit_message_caption(
             caption=cpt,
@@ -269,12 +275,13 @@ async def help_menu(c: Gojo, m: Message):
         if m.chat.type == ChatType.PRIVATE:
             ou = await gen_cmds_kb(m)
             keyboard = ikb(ou, True)
-            msg = f"""
-Hey **[{m.from_user.first_name}](http://t.me/{m.from_user.username})**!I am {c.me.first_name}✨.
-I'm here to help you manage your group(s)!
-Commands available:
-× /start: Start the bot
-× /help: Give's you this message."""
+            msg = (
+                f"Hey **[{m.from_user.first_name}](tg://user?id={m.from_user.id})**!\n\n"
+                f"🛡 **{c.me.first_name}** — Group Security Bot\n\n"
+                f"**Commands available:**\n"
+                f"× /start — Start the bot\n"
+                f"× /help — Show this menu"
+            )
         else:
             keyboard = InlineKeyboardMarkup(
                 [
