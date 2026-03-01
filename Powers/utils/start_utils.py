@@ -43,7 +43,7 @@ async def gen_start_kb(q: Message or CallbackQuery):
                     f"https://t.me/{Config.BOT_USERNAME}?startgroup=new",
                     "url",
                 ),
-                ("Bot Staffs 🚔", "bot_curr_info"),
+                ("Bot Staffs 🚔", "give_bot_staffs"),
             ],
             [
                 ("📚 Commands & Help", "commands"),
@@ -255,7 +255,7 @@ async def get_help_msg(c: Gojo, m: Message or CallbackQuery, help_option: str):
     else:
         mes = m.message if isinstance(m, CallbackQuery) else m
         help_msg = f"""
-Hey **[{mes.from_user.first_name}](tg://user?id={mes.from_user.id})**!I am {c.me.first_name}✨.
+Hey **[{mes.from_user.first_name}](http://t.me/{mes.from_user.username})**!I am {c.me.first_name}✨.
 I'm here to help you manage your groups!
 Commands available:
 × /start: Start the bot
