@@ -1,11 +1,3 @@
-"""
-handlers/nsfw.py — Full NSFW + Weapon + Drug Detection Plugin
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Project: nswf-main (alag bot — Gc repo se alag hai)
-DB:      database/nsfw_db.py
-Model:   handlers/nsfw_model/nsfw_mobilenet2.224x224.h5
-"""
-
 import asyncio
 import gzip
 import json
