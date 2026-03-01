@@ -64,13 +64,19 @@ class NSFWViolations(MongoDB):
         super().__init__(self.db_name)
 
     def add_violation(self, chat_id, user_id, category):
+        """
+        Fix: MongoDB.update() wraps in $set internally,
+        so $inc nahi chal sakda. Manual fetch + increment karo.
+        """
         existing = self.find_one({
             "chat_id": chat_id, "user_id": user_id, "category": category
         })
         if existing:
+            # Manual increment — $inc nahi, fetch karke +1 karo
+            new_count = existing.get("count", 0) + 1
             self.update(
                 {"chat_id": chat_id, "user_id": user_id, "category": category},
-                {"$inc": {"count": 1}, "$set": {"last_seen": datetime.utcnow()}}
+                {"count": new_count, "last_seen": datetime.utcnow()}
             )
         else:
             self.insert_one({
