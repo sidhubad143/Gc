@@ -45,10 +45,6 @@ async def gen_start_kb(q: Message or CallbackQuery):
                 ),
             ],
             [
-                ("📋 Commands", "commands"),
-                ("⚡️ Bot Info", "bot_curr_info"),
-            ],
-            [
                 (
                     "Owner ❤️",
                     "https://t.me/BadMundaXD",
@@ -59,6 +55,9 @@ async def gen_start_kb(q: Message or CallbackQuery):
                     f"https://{SUPPORT_CHANNEL}.t.me",
                     "url",
                 ),
+            ],
+                        [
+                ("📋 Commands", "commands"),
             ],
         ]
     )
